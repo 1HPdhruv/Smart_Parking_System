@@ -40,6 +40,18 @@ export function Header({ title = "Live Dashboard" }: { title?: string }) {
     }
   }, []);
 
+  // Load location
+  const [locationName, setLocationName] = useState("");
+  useEffect(() => {
+    const loc = localStorage.getItem("parker_location");
+    if (loc) {
+      try {
+        const parsed = JSON.parse(loc);
+        setLocationName(parsed.place || "");
+      } catch {}
+    }
+  }, []);
+
   // Close dropdowns on outside click
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -171,7 +183,7 @@ export function Header({ title = "Live Dashboard" }: { title?: string }) {
               <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-primary)", lineHeight: 1.3 }}>
                 {user.firstName} {user.lastName}
               </div>
-              <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{user.role} · Zone A</div>
+              <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{user.role}{locationName ? ` · ${locationName.length > 20 ? locationName.slice(0, 20) + "…" : locationName}` : ""}</div>
             </div>
           </div>
 
@@ -195,6 +207,17 @@ export function Header({ title = "Live Dashboard" }: { title?: string }) {
                   {item.label}
                 </Link>
               ))}
+              <button onClick={() => {
+                localStorage.removeItem("parker_location");
+                setShowProfile(false);
+                router.push("/select-location");
+              }} style={{
+                display: "block", width: "100%", padding: "0.65rem 1rem", fontSize: "0.82rem",
+                color: "var(--accent)", background: "none", border: "none", cursor: "pointer",
+                textAlign: "left", borderBottom: "1px solid var(--border)", transition: "background 0.15s",
+              }}>
+                Change Location
+              </button>
               <button onClick={handleLogout} style={{
                 display: "block", width: "100%", padding: "0.65rem 1rem", fontSize: "0.82rem",
                 color: "var(--red)", background: "none", border: "none", cursor: "pointer",

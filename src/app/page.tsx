@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 const features = [
@@ -18,6 +19,18 @@ const stats = [
 ];
 
 export default function LandingPage() {
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [userName, setUserName] = useState("");
+
+  useEffect(() => {
+    const token = localStorage.getItem("parker_token");
+    const user = localStorage.getItem("parker_user");
+    if (token && user) {
+      setLoggedIn(true);
+      try { setUserName(JSON.parse(user).firstName || ""); } catch {}
+    }
+  }, []);
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-base)", overflowX: "hidden" }}>
 
@@ -33,10 +46,18 @@ export default function LandingPage() {
           ))}
         </div>
         <div className="nav-actions">
-          <Link href="/login" className="btn btn-ghost" style={{ padding: "0.45rem 1rem", fontSize: "0.82rem" }}>Log in</Link>
-          <Link href="/register" className="btn btn-primary" style={{ padding: "0.45rem 1rem", fontSize: "0.82rem" }}>
-            Register →
-          </Link>
+          {loggedIn ? (
+            <Link href="/live" className="btn btn-primary" style={{ padding: "0.45rem 1rem", fontSize: "0.82rem" }}>
+              Go to Dashboard →
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" className="btn btn-ghost" style={{ padding: "0.45rem 1rem", fontSize: "0.82rem" }}>Log in</Link>
+              <Link href="/register" className="btn btn-primary" style={{ padding: "0.45rem 1rem", fontSize: "0.82rem" }}>
+                Register →
+              </Link>
+            </>
+          )}
         </div>
       </nav>
 
@@ -66,12 +87,20 @@ export default function LandingPage() {
           </p>
 
           <div className="animate-fade-up-3" style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
-            <Link href="/register" className="btn btn-primary" style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}>
-              Get Started →
-            </Link>
-            <Link href="/login" className="btn btn-ghost" style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}>
-              Sign In
-            </Link>
+            {loggedIn ? (
+              <Link href="/live" className="btn btn-primary" style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}>
+                Welcome back, {userName || "Operator"} — Open Dashboard →
+              </Link>
+            ) : (
+              <>
+                <Link href="/register" className="btn btn-primary" style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}>
+                  Get Started →
+                </Link>
+                <Link href="/login" className="btn btn-ghost" style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}>
+                  Sign In
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -121,8 +150,8 @@ export default function LandingPage() {
               <p style={{ marginBottom: "2.5rem", maxWidth: "440px", margin: "0 auto 2rem" }}>
                 Join the operators using Parker OS to manage smarter, earn more, and scale faster.
               </p>
-              <Link href="/register" className="btn btn-accent" style={{ padding: "0.8rem 2rem", fontSize: "1rem" }}>
-                Create an Account →
+              <Link href={loggedIn ? "/live" : "/register"} className="btn btn-accent" style={{ padding: "0.8rem 2rem", fontSize: "1rem" }}>
+                {loggedIn ? "Open Dashboard →" : "Create an Account →"}
               </Link>
             </div>
           </div>

@@ -36,8 +36,8 @@ function LoginForm() {
       localStorage.setItem("parker_token", data.token);
       localStorage.setItem("parker_user", JSON.stringify(data.user));
 
-      // Redirect to live dashboard
-      router.push("/live");
+      // Redirect to location selector (will auto-skip if already chosen)
+      router.push("/select-location");
     } catch (err: any) {
       setError(err.message);
     } finally {
