@@ -33,9 +33,9 @@ export default function LandingPage() {
           ))}
         </div>
         <div className="nav-actions">
-          <Link href="/live" className="btn btn-ghost" style={{ padding: "0.45rem 1rem", fontSize: "0.82rem" }}>Log in</Link>
-          <Link href="/live" className="btn btn-primary" style={{ padding: "0.45rem 1rem", fontSize: "0.82rem" }}>
-            Dashboard →
+          <Link href="/login" className="btn btn-ghost" style={{ padding: "0.45rem 1rem", fontSize: "0.82rem" }}>Log in</Link>
+          <Link href="/register" className="btn btn-primary" style={{ padding: "0.45rem 1rem", fontSize: "0.82rem" }}>
+            Register →
           </Link>
         </div>
       </nav>
@@ -66,11 +66,11 @@ export default function LandingPage() {
           </p>
 
           <div className="animate-fade-up-3" style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
-            <Link href="/live" className="btn btn-primary" style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}>
-              Enter Dashboard →
+            <Link href="/register" className="btn btn-primary" style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}>
+              Get Started →
             </Link>
-            <Link href="/live" className="btn btn-ghost" style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}>
-              Watch Demo
+            <Link href="/login" className="btn btn-ghost" style={{ padding: "0.75rem 1.75rem", fontSize: "0.95rem" }}>
+              Sign In
             </Link>
           </div>
         </div>
@@ -121,8 +121,8 @@ export default function LandingPage() {
               <p style={{ marginBottom: "2.5rem", maxWidth: "440px", margin: "0 auto 2rem" }}>
                 Join the operators using Parker OS to manage smarter, earn more, and scale faster.
               </p>
-              <Link href="/live" className="btn btn-accent" style={{ padding: "0.8rem 2rem", fontSize: "1rem" }}>
-                Start with Live Dashboard →
+              <Link href="/register" className="btn btn-accent" style={{ padding: "0.8rem 2rem", fontSize: "1rem" }}>
+                Create an Account →
               </Link>
             </div>
           </div>

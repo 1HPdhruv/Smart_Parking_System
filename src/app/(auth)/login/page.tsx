@@ -1,22 +1,114 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const registered = searchParams.get("registered");
+  
   const [show, setShow] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-    setTimeout(() => {
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const res = await fetch(`${apiUrl}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Invalid credentials");
+      }
+
+      // Store token securely in localStorage
+      localStorage.setItem("parker_token", data.token);
+      localStorage.setItem("parker_user", JSON.stringify(data.user));
+
+      // Redirect to live dashboard
+      router.push("/live");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
       setLoading(false);
-      setError("Invalid credentials. Please try again.");
-    }, 1500);
+    }
   };
 
+  return (
+    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {registered && (
+        <div style={{ background: "var(--green-dim)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: "var(--radius-md)", padding: "0.625rem 0.875rem", fontSize: "0.82rem", color: "var(--green)", marginBottom: "0.5rem" }}>
+          Registration successful! You can now log in.
+        </div>
+      )}
+
+      <div>
+        <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "0.4rem" }}>Email address</label>
+        <input 
+          className="input" 
+          type="email" 
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="operator@parker.io" 
+          required 
+        />
+      </div>
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+          <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>Password</label>
+          <a href="#" style={{ fontSize: "0.78rem", color: "var(--accent)" }}>Forgot password?</a>
+        </div>
+        <div style={{ position: "relative" }}>
+          <input 
+            className="input" 
+            type={show ? "text" : "password"} 
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••" 
+            required 
+            style={{ paddingRight: "2.5rem" }} 
+          />
+          <button type="button" onClick={() => setShow(v => !v)} style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85rem" }}>
+            {show ? "🙈" : "👁️"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <input type="checkbox" id="remember" style={{ accentColor: "var(--accent)", width: "14px", height: "14px" }} />
+        <label htmlFor="remember" style={{ fontSize: "0.82rem", color: "var(--text-secondary)", cursor: "pointer" }}>Remember me for 30 days</label>
+      </div>
+
+      {error && (
+        <div style={{ background: "var(--red-dim)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "var(--radius-md)", padding: "0.625rem 0.875rem", fontSize: "0.82rem", color: "var(--red)" }}>
+          {error}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        className="btn btn-primary"
+        style={{ width: "100%", justifyContent: "center", padding: "0.75rem", fontSize: "0.9rem", opacity: loading ? 0.7 : 1, marginTop: "0.5rem" }}
+        disabled={loading}
+      >
+        {loading ? "Signing in..." : "Sign in →"}
+      </button>
+    </form>
+  );
+}
+
+export default function LoginPage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg-base)" }}>
       {/* Left — Brand */}
@@ -58,46 +150,9 @@ export default function LoginPage() {
             Enter your credentials to access the platform.
           </p>
 
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            <div>
-              <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "0.4rem" }}>Email address</label>
-              <input className="input" type="email" placeholder="operator@parker.io" required />
-            </div>
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem" }}>
-                <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>Password</label>
-                <a href="#" style={{ fontSize: "0.78rem", color: "var(--accent)" }}>Forgot password?</a>
-              </div>
-              <div style={{ position: "relative" }}>
-                <input className="input" type={show ? "text" : "password"} placeholder="••••••••" required style={{ paddingRight: "2.5rem" }} />
-                <button type="button" onClick={() => setShow(v => !v)} style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.85rem" }}>
-                  {show ? "🙈" : "👁️"}
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <input type="checkbox" id="remember" style={{ accentColor: "var(--accent)", width: "14px", height: "14px" }} />
-              <label htmlFor="remember" style={{ fontSize: "0.82rem", color: "var(--text-secondary)", cursor: "pointer" }}>Remember me for 30 days</label>
-            </div>
-
-            {error && (
-              <div style={{ background: "var(--red-dim)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "var(--radius-md)", padding: "0.625rem 0.875rem", fontSize: "0.82rem", color: "var(--red)" }}>
-                {error}
-              </div>
-            )}
-
-            <Link href="/live">
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ width: "100%", justifyContent: "center", padding: "0.75rem", fontSize: "0.9rem", opacity: loading ? 0.7 : 1 }}
-                disabled={loading}
-              >
-                {loading ? "Signing in..." : "Sign in →"}
-              </button>
-            </Link>
-          </form>
+          <Suspense fallback={<div>Loading form...</div>}>
+            <LoginForm />
+          </Suspense>
 
           <div style={{ margin: "1.5rem 0", display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />

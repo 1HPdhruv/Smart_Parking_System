@@ -1,10 +1,11 @@
 "use client";
+import { useState, useEffect } from "react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
 
-/* ── Revenue trend (last 14 days) ── */
+/* ── Simulated Historical Data (Will sync with DB as time goes on) ── */
 const revData = [
   { day: "May 3",  rev: 28400, sessions: 310 },
   { day: "May 4",  rev: 31200, sessions: 345 },
@@ -22,7 +23,6 @@ const revData = [
   { day: "May 16", rev: 41250, sessions: 460 },
 ];
 
-/* ── Occupancy heatmap data (hour × day) ── */
 const HOURS = ["6am","7am","8am","9am","10am","11am","12pm","1pm","2pm","3pm","4pm","5pm","6pm","7pm","8pm","9pm"];
 const DAYS  = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const heatmap: { day: string; hour: string; pct: number }[] = [];
@@ -35,21 +35,6 @@ DAYS.forEach(day => {
     heatmap.push({ day, hour, pct: Math.min(100, base + peak + rand) });
   });
 });
-
-/* ── Dwell time ── */
-const dwellData = [
-  { bucket: "<15m", count: 82 }, { bucket: "15–30m", count: 145 }, { bucket: "30–60m", count: 198 },
-  { bucket: "1–2h",  count: 134 }, { bucket: "2–4h", count: 76 }, { bucket: "4h+", count: 28 },
-];
-
-/* ── Top vehicles ── */
-const topVehicles = [
-  { plate: "MH12-AB-4521", sessions: 28, revenue: 4200 },
-  { plate: "DL03-XZ-9910", sessions: 24, revenue: 3600 },
-  { plate: "KA01-CD-1234", sessions: 21, revenue: 3150 },
-  { plate: "GJ05-PQ-3345", sessions: 18, revenue: 2700 },
-  { plate: "TN22-EF-7890", sessions: 15, revenue: 2250 },
-];
 
 const TOOLTIP_STYLE = {
   contentStyle: { background: "#1a1a1f", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", fontSize: "12px", color: "#f4f4f5" },
@@ -65,16 +50,44 @@ function heatColor(pct: number) {
 }
 
 export default function AnalyticsPage() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+        const res = await fetch(`${apiUrl}/api/analytics`);
+        if (res.ok) {
+          setData(await res.json());
+        }
+      } catch (err) {
+        console.error("Failed to load analytics", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAnalytics();
+  }, []);
+
+  if (loading) return <div style={{ padding: "2rem", color: "var(--text-muted)" }}>Compiling analytical aggregations...</div>;
+
+  const { kpis, dwellTimeData, topVehicles } = data || {
+    kpis: { totalRevenue: 0, totalSessions: 0, avgRevenue: 0, avgDwellTime: 0 },
+    dwellTimeData: [],
+    topVehicles: []
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
 
       {/* ── Summary KPIs ── */}
       <div className="grid-metrics">
         {[
-          { label: "Total Revenue (MTD)",    value: "₹4.86L",  trend: "+14.2% MoM", up: true  },
-          { label: "Total Sessions (MTD)",   value: "5,284",   trend: "+8.7% MoM",  up: true  },
-          { label: "Avg. Revenue / Session", value: "₹92",     trend: "+5.1% MoM",  up: true  },
-          { label: "Avg. Dwell Time",        value: "42 min",  trend: "+3 min MoM", up: false },
+          { label: "Total Revenue (Actual)",   value: `₹${kpis.totalRevenue.toLocaleString()}`, trend: "Live DB", up: true  },
+          { label: "Total Sessions",           value: kpis.totalSessions.toLocaleString(),      trend: "Live DB",  up: true  },
+          { label: "Avg. Revenue / Session",   value: `₹${kpis.avgRevenue}`,                    trend: "Live DB",  up: true  },
+          { label: "Avg. Dwell Time",          value: `${kpis.avgDwellTime} min`,               trend: "Live DB", up: false },
         ].map((m, i) => (
           <div key={i} className="metric-card animate-fade-up" style={{ animationDelay: `${i * 0.07}s` }}>
             <div className="metric-label">{m.label}</div>
@@ -84,10 +97,10 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      {/* ── Revenue + Sessions trend ── */}
+      {/* ── Revenue + Sessions trend (Simulated) ── */}
       <div className="card animate-fade-up-1" style={{ height: "300px", display: "flex", flexDirection: "column" }}>
         <div className="section-header">
-          <span className="section-title">Revenue & Sessions — Last 14 Days</span>
+          <span className="section-title">Revenue & Sessions — Last 14 Days (Simulation)</span>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button className="btn btn-ghost" style={{ padding: "0.3rem 0.75rem", fontSize: "0.75rem" }}>Export CSV</button>
             <button className="btn btn-ghost" style={{ padding: "0.3rem 0.75rem", fontSize: "0.75rem" }}>Export PDF</button>
@@ -121,22 +134,20 @@ export default function AnalyticsPage() {
       {/* ── Heatmap + Dwell Time ── */}
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem" }}>
 
-        {/* Occupancy Heatmap */}
+        {/* Occupancy Heatmap (Simulated) */}
         <div className="card animate-fade-up-2">
           <div className="section-header" style={{ marginBottom: "1rem" }}>
-            <span className="section-title">Occupancy Heatmap — Hour × Day of Week</span>
+            <span className="section-title">Occupancy Heatmap (Simulation)</span>
           </div>
           <div style={{ overflowX: "auto" }}>
             <div style={{ display: "grid", gridTemplateColumns: `60px repeat(${HOURS.length}, 1fr)`, gap: "3px", minWidth: "580px" }}>
-              {/* Header row */}
               <div />
               {HOURS.map(h => (
                 <div key={h} style={{ fontSize: "0.6rem", color: "var(--text-muted)", textAlign: "center", paddingBottom: "4px", fontWeight: 500 }}>{h}</div>
               ))}
-              {/* Data rows */}
               {DAYS.map(day => (
-                <>
-                  <div key={`label-${day}`} style={{ fontSize: "0.72rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", fontWeight: 500 }}>{day}</div>
+                <div key={`row-${day}`} style={{ display: "contents" }}>
+                  <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", fontWeight: 500 }}>{day}</div>
                   {HOURS.map(hour => {
                     const cell = heatmap.find(c => c.day === day && c.hour === hour);
                     const pct = cell?.pct ?? 0;
@@ -155,28 +166,20 @@ export default function AnalyticsPage() {
                       />
                     );
                   })}
-                </>
+                </div>
               ))}
-            </div>
-            {/* Heatmap legend */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.875rem", fontSize: "0.7rem", color: "var(--text-muted)" }}>
-              <span>Low</span>
-              {["rgba(34,197,94,0.15)","rgba(34,197,94,0.4)","rgba(245,158,11,0.5)","rgba(239,68,68,0.4)","rgba(239,68,68,0.75)"].map((c, i) => (
-                <div key={i} style={{ width: "24px", height: "12px", background: c, borderRadius: "3px" }} />
-              ))}
-              <span>High</span>
             </div>
           </div>
         </div>
 
-        {/* Dwell Time Distribution */}
+        {/* Dwell Time Distribution (Real Data) */}
         <div className="card animate-fade-up-2" style={{ display: "flex", flexDirection: "column" }}>
           <div className="section-header">
-            <span className="section-title">Dwell Time Distribution</span>
+            <span className="section-title">Dwell Time (Actual DB)</span>
           </div>
           <div style={{ flex: 1, minHeight: "220px" }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dwellData} margin={{ top: 5, right: 5, left: -28, bottom: 0 }}>
+              <BarChart data={dwellTimeData} margin={{ top: 5, right: 5, left: -28, bottom: 0 }}>
                 <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
                 <XAxis dataKey="bucket" stroke="#3f3f46" tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
                 <YAxis stroke="#3f3f46" tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
@@ -188,10 +191,10 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* ── Top Vehicles ── */}
+      {/* ── Top Vehicles (Real Data) ── */}
       <div className="card animate-fade-up-3">
         <div className="section-header">
-          <span className="section-title">Top Vehicles by Sessions (This Month)</span>
+          <span className="section-title">Top Vehicles by Sessions (Actual DB)</span>
           <button className="btn btn-ghost" style={{ padding: "0.3rem 0.75rem", fontSize: "0.75rem" }}>Export</button>
         </div>
         <div className="table-wrapper" style={{ border: "none" }}>
@@ -200,19 +203,21 @@ export default function AnalyticsPage() {
               <tr>
                 <th>#</th>
                 <th>Plate Number</th>
-                <th>Sessions</th>
-                <th>Revenue Generated</th>
+                <th>Total Sessions</th>
+                <th>Total Revenue</th>
                 <th>Avg. per Session</th>
               </tr>
             </thead>
             <tbody>
-              {topVehicles.map((v, i) => (
+              {topVehicles.length === 0 ? (
+                <tr><td colSpan={5} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>No vehicle history logged yet.</td></tr>
+              ) : topVehicles.map((v: any, i: number) => (
                 <tr key={v.plate}>
                   <td style={{ color: "var(--text-muted)", fontWeight: 600 }}>#{i + 1}</td>
                   <td><span style={{ fontFamily: "monospace", color: "var(--accent)", fontWeight: 600 }}>{v.plate}</span></td>
                   <td>{v.sessions}</td>
                   <td style={{ color: "var(--green)", fontWeight: 600 }}>₹{v.revenue.toLocaleString()}</td>
-                  <td style={{ color: "var(--text-secondary)" }}>₹{Math.round(v.revenue / v.sessions)}</td>
+                  <td style={{ color: "var(--text-secondary)" }}>₹{v.sessions > 0 ? Math.round(v.revenue / v.sessions).toLocaleString() : 0}</td>
                 </tr>
               ))}
             </tbody>

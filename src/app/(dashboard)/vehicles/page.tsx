@@ -1,24 +1,16 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { io, Socket } from "socket.io-client";
 
-interface ANPREvent {
-  id: string; plate: string; zone: string; level: string;
-  entry: string; exit: string | null; duration: string | null; fee: string | null;
-  action: "ACTIVE" | "COMPLETED"; type: "regular" | "blocked" | "whitelisted";
+interface SessionData {
+  id: string;
+  plate: string;
+  entryTime: string;
+  exitTime: string | null;
+  fee: number | null;
+  status: "ACTIVE" | "COMPLETED";
+  slot?: { id: string; zone: { name: string; level: string } };
 }
-
-const RAW_EVENTS: ANPREvent[] = [
-  { id:"1",  plate:"MH12-AB-4521", zone:"Zone A", level:"L1", entry:"09:14", exit:"11:02", duration:"1h 48m", fee:"₹162", action:"COMPLETED", type:"regular" },
-  { id:"2",  plate:"DL03-XZ-9910", zone:"Zone B", level:"L2", entry:"10:30", exit:null,    duration:null,     fee:null,   action:"ACTIVE",    type:"regular" },
-  { id:"3",  plate:"KA01-CD-1234", zone:"Zone A", level:"L1", entry:"08:00", exit:"09:45", duration:"1h 45m", fee:"₹157", action:"COMPLETED", type:"whitelisted" },
-  { id:"4",  plate:"TN22-EF-7890", zone:"Zone C", level:"L3", entry:"11:15", exit:"12:00", duration:"45m",   fee:"₹68",  action:"COMPLETED", type:"regular" },
-  { id:"5",  plate:"GJ05-PQ-3345", zone:"Zone B", level:"L1", entry:"07:45", exit:null,    duration:null,     fee:null,   action:"ACTIVE",    type:"blocked"  },
-  { id:"6",  plate:"RJ14-MN-8821", zone:"Zone A", level:"L2", entry:"13:00", exit:"14:30", duration:"1h 30m", fee:"₹135", action:"COMPLETED", type:"regular" },
-  { id:"7",  plate:"UP32-YZ-5512", zone:"Zone C", level:"L2", entry:"09:00", exit:"10:15", duration:"1h 15m", fee:"₹113", action:"COMPLETED", type:"regular" },
-  { id:"8",  plate:"HR26-GH-0099", zone:"Zone A", level:"L1", entry:"12:30", exit:null,    duration:null,     fee:null,   action:"ACTIVE",    type:"regular" },
-  { id:"9",  plate:"MH12-AB-4521", zone:"Zone A", level:"L1", entry:"07:00", exit:"08:50", duration:"1h 50m", fee:"₹165", action:"COMPLETED", type:"regular" },
-  { id:"10", plate:"DL03-XZ-9910", zone:"Zone C", level:"L3", entry:"06:30", exit:"07:20", duration:"50m",   fee:"₹75",  action:"COMPLETED", type:"regular" },
-];
 
 const BLOCKLIST = [
   { plate:"GJ05-PQ-3345", reason:"Unpaid dues", since:"May 10, 2025" },
@@ -33,16 +25,65 @@ const WHITELIST = [
 export default function VehiclesPage() {
   const [search, setSearch]   = useState("");
   const [tab, setTab]         = useState<"log"|"blocklist"|"whitelist">("log");
-  const [selected, setSelected] = useState<ANPREvent | null>(null);
+  const [sessions, setSessions] = useState<SessionData[]>([]);
+  const [selected, setSelected] = useState<SessionData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+        const res = await fetch(`${apiUrl}/api/vehicles/sessions`);
+        if (res.ok) {
+          const data = await res.json();
+          setSessions(data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSessions();
+  }, []);
+
+  useEffect(() => {
+    const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const socket: Socket = io(socketUrl);
+
+    socket.on("ANPR_EVENT", () => {
+      // Re-fetch sessions on any new ANPR event
+      fetch(`${socketUrl}/api/vehicles/sessions`)
+        .then(r => r.json())
+        .then(data => setSessions(data))
+        .catch(() => {});
+    });
+
+    return () => { socket.disconnect(); };
+  }, []);
 
   const filtered = useMemo(() =>
-    RAW_EVENTS.filter(e =>
+    sessions.filter(e =>
       e.plate.toLowerCase().includes(search.toLowerCase()) ||
-      e.zone.toLowerCase().includes(search.toLowerCase())
-    ), [search]);
+      (e.slot?.zone.name.toLowerCase() || "").includes(search.toLowerCase())
+    ), [search, sessions]);
 
-  const typeColor = (t: ANPREvent["type"]) =>
-    t === "blocked" ? "badge-red" : t === "whitelisted" ? "badge-accent" : "";
+  const formatTime = (isoString: string) => {
+    return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getDuration = (entry: string, exit: string | null) => {
+    const end = exit ? new Date(exit) : new Date();
+    const diffMins = Math.floor((end.getTime() - new Date(entry).getTime()) / 60000);
+    if (diffMins < 60) return `${diffMins}m`;
+    const hrs = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    return `${hrs}h ${mins}m`;
+  };
+
+  const activeSessionsCount = sessions.filter(s => s.status === "ACTIVE").length;
+
+  if (loading) return <div style={{ padding: "2rem", color: "var(--text-muted)" }}>Loading session database...</div>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
@@ -50,10 +91,10 @@ export default function VehiclesPage() {
       {/* ── Summary Cards ── */}
       <div className="grid-metrics">
         {[
-          { label: "Total Events Today", value: "460",  trend: "+8.7%",  up: true  },
-          { label: "Active Sessions",    value: "3",    trend: "Live",    up: true  },
-          { label: "Blocked Vehicles",   value: "2",    trend: "Alert",   up: false },
-          { label: "Whitelisted",        value: "12",   trend: "No fee",  up: true  },
+          { label: "Total Events Logged", value: sessions.length.toString(), trend: "Database", up: true },
+          { label: "Active Sessions",     value: activeSessionsCount.toString(), trend: "Live", up: true },
+          { label: "Blocked Vehicles",    value: BLOCKLIST.length.toString(), trend: "Alert", up: false },
+          { label: "Whitelisted",         value: WHITELIST.length.toString(), trend: "No fee", up: true },
         ].map((m, i) => (
           <div key={i} className="metric-card">
             <div className="metric-label">{m.label}</div>
@@ -105,20 +146,27 @@ export default function VehiclesPage() {
                 <thead>
                   <tr>
                     <th>Plate</th><th>Zone</th><th>Entry</th><th>Exit</th>
-                    <th>Duration</th><th>Fee</th><th>Status</th><th>Type</th>
+                    <th>Duration</th><th>Fee</th><th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(e => (
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={8} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>No sessions found in the database.</td></tr>
+                  ) : filtered.map(e => (
                     <tr key={e.id} onClick={() => setSelected(selected?.id === e.id ? null : e)} style={{ cursor: "pointer" }}>
                       <td><span style={{ fontFamily: "monospace", fontWeight: 700, color: "var(--accent)" }}>{e.plate}</span></td>
-                      <td><span style={{ fontSize: "0.8rem" }}>{e.zone} · {e.level}</span></td>
-                      <td style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{e.entry}</td>
-                      <td style={{ fontFamily: "monospace", fontSize: "0.85rem", color: e.exit ? "var(--text-primary)" : "var(--text-muted)" }}>{e.exit ?? "—"}</td>
-                      <td style={{ color: "var(--text-secondary)" }}>{e.duration ?? <span className="dot dot-green pulse" style={{display:"inline-block"}}/>}</td>
-                      <td style={{ color: "var(--green)", fontWeight: 600 }}>{e.fee ?? "—"}</td>
-                      <td><span className={`badge ${e.action === "ACTIVE" ? "badge-green" : ""}`} style={{ fontSize: "0.68rem", background: e.action === "ACTIVE" ? "var(--green-dim)" : "var(--bg-hover)", color: e.action === "ACTIVE" ? "var(--green)" : "var(--text-muted)", borderColor: e.action === "ACTIVE" ? "rgba(34,197,94,0.25)" : "var(--border)" }}>{e.action}</span></td>
-                      <td>{e.type !== "regular" ? <span className={`badge ${typeColor(e.type)}`} style={{ fontSize: "0.65rem" }}>{e.type}</span> : <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>regular</span>}</td>
+                      <td>
+                        {e.slot ? (
+                          <span style={{ fontSize: "0.8rem" }}>{e.slot.zone.name} · {e.slot.id}</span>
+                        ) : (
+                          <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Unknown</span>
+                        )}
+                      </td>
+                      <td style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{formatTime(e.entryTime)}</td>
+                      <td style={{ fontFamily: "monospace", fontSize: "0.85rem", color: e.exitTime ? "var(--text-primary)" : "var(--text-muted)" }}>{e.exitTime ? formatTime(e.exitTime) : "—"}</td>
+                      <td style={{ color: "var(--text-secondary)" }}>{getDuration(e.entryTime, e.exitTime)}</td>
+                      <td style={{ color: "var(--green)", fontWeight: 600 }}>{e.fee ? `₹${e.fee}` : "—"}</td>
+                      <td><span className={`badge ${e.action === "ACTIVE" || e.status === "ACTIVE" ? "badge-green" : ""}`} style={{ fontSize: "0.68rem", background: e.status === "ACTIVE" ? "var(--green-dim)" : "var(--bg-hover)", color: e.status === "ACTIVE" ? "var(--green)" : "var(--text-muted)", borderColor: e.status === "ACTIVE" ? "rgba(34,197,94,0.25)" : "var(--border)" }}>{e.status}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -176,13 +224,12 @@ export default function VehiclesPage() {
               {selected.plate}
             </div>
             {[
-              { l: "Zone",     v: `${selected.zone} · ${selected.level}` },
-              { l: "Entry",    v: selected.entry },
-              { l: "Exit",     v: selected.exit ?? "Still Active" },
-              { l: "Duration", v: selected.duration ?? "Ongoing" },
-              { l: "Fee",      v: selected.fee ?? "Accruing..." },
-              { l: "Status",   v: selected.action },
-              { l: "Type",     v: selected.type },
+              { l: "Zone / Slot", v: selected.slot ? `${selected.slot.zone.name} · ${selected.slot.id}` : "Unknown" },
+              { l: "Entry Time",  v: new Date(selected.entryTime).toLocaleString() },
+              { l: "Exit Time",   v: selected.exitTime ? new Date(selected.exitTime).toLocaleString() : "Still Active" },
+              { l: "Duration",    v: getDuration(selected.entryTime, selected.exitTime) },
+              { l: "Total Fee",   v: selected.fee ? `₹${selected.fee}` : "Accruing..." },
+              { l: "Status",      v: selected.status },
             ].map(row => (
               <div key={row.l} style={{ display: "flex", justifyContent: "space-between", padding: "0.55rem 0", borderBottom: "1px solid var(--border)", fontSize: "0.83rem" }}>
                 <span style={{ color: "var(--text-muted)" }}>{row.l}</span>

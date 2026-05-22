@@ -1,48 +1,105 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { io, Socket } from "socket.io-client";
 
 type SlotStatus = "available" | "occupied" | "reserved" | "disabled";
-interface MapSlot { id: string; row: number; col: number; status: SlotStatus; plate?: string; since?: string; fee?: string; }
-
-const ZONES = ["Zone A","Zone B","Zone C"];
-const LEVELS = ["Level 1","Level 2","Level 3","Rooftop"];
-
-const generateZoneSlots = (zone: string, level: string): MapSlot[] => {
-  const rows = 5, cols = 10;
-  return Array.from({ length: rows * cols }, (_, i) => {
-    const r = Math.random();
-    const status: SlotStatus = i === 12 || i === 13 || i === 34 ? "disabled"
-      : r > 0.35 ? "occupied" : r > 0.12 ? "available" : "reserved";
-    return {
-      id: `${zone[5]}-${level[6]}${String(i + 1).padStart(2, "0")}`,
-      row: Math.floor(i / cols),
-      col: i % cols,
-      status,
-      plate: status === "occupied" ? `MH${String(Math.floor(Math.random()*99)).padStart(2,"0")}-AB-${String(Math.floor(Math.random()*9999)).padStart(4,"0")}` : undefined,
-      since: status === "occupied" ? `${Math.floor(Math.random() * 120 + 5)}m ago` : undefined,
-      fee: status === "occupied" ? `₹${Math.floor(Math.random() * 80 + 20)}` : undefined,
-    };
-  });
-};
+interface BackendSlot { id: string; zoneId: string; status: SlotStatus; plate?: string; }
+interface BackendZone { id: string; name: string; level: string; capacity: number; slots: BackendSlot[]; }
+interface MapSlot extends BackendSlot { row: number; col: number; since?: string; fee?: string; }
 
 export default function MapPage() {
-  const [zone,  setZone]  = useState(ZONES[0]);
-  const [level, setLevel] = useState(LEVELS[0]);
+  const [zones, setZones] = useState<BackendZone[]>([]);
+  const [activeZone, setActiveZone] = useState<BackendZone | null>(null);
   const [hovered, setHovered] = useState<MapSlot | null>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [loading, setLoading] = useState(true);
 
-  const slots = generateZoneSlots(zone, level);
-  const occupied  = slots.filter(s => s.status === "occupied").length;
-  const available = slots.filter(s => s.status === "available").length;
-  const reserved  = slots.filter(s => s.status === "reserved").length;
-  const pct = Math.round((occupied / (slots.length - slots.filter(s=>s.status==="disabled").length)) * 100);
+  // Fetch initial zones and slots
+  useEffect(() => {
+    const fetchZones = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+        const res = await fetch(`${apiUrl}/api/zones`);
+        if (!res.ok) throw new Error("Failed to fetch zones");
+        const data: BackendZone[] = await res.json();
+        setZones(data);
+        if (data.length > 0) setActiveZone(data[0]);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchZones();
+  }, []);
+
+  // Handle WebSockets for real-time updates
+  useEffect(() => {
+    const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const socket: Socket = io(socketUrl);
+
+    socket.on("SLOT_UPDATE", (data: { slotId: string; status: SlotStatus; plate?: string }) => {
+      setZones(prevZones => prevZones.map(zone => ({
+        ...zone,
+        slots: zone.slots.map(slot => 
+          slot.id === data.slotId 
+            ? { ...slot, status: data.status, plate: data.plate } 
+            : slot
+        )
+      })));
+      
+      // Update active zone if it was mutated
+      setActiveZone(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          slots: prev.slots.map(slot => 
+            slot.id === data.slotId 
+              ? { ...slot, status: data.status, plate: data.plate } 
+              : slot
+          )
+        };
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  // Compute map grid for active zone
+  const mapSlots: MapSlot[] = useMemo(() => {
+    if (!activeZone) return [];
+    // Sort slots by ID so they are in consistent order (A01, A02...)
+    const sorted = [...activeZone.slots].sort((a, b) => a.id.localeCompare(b.id));
+    return sorted.map((slot, i) => {
+      // 10 columns per row
+      return {
+        ...slot,
+        row: Math.floor(i / 10),
+        col: i % 10,
+        // Mock data for UI aesthetics (real system would pull from active Session)
+        since: slot.status === "occupied" ? "Just now" : undefined,
+        fee: slot.status === "occupied" ? "₹40" : undefined,
+      };
+    });
+  }, [activeZone]);
+
+  const occupied  = mapSlots.filter(s => s.status === "occupied").length;
+  const available = mapSlots.filter(s => s.status === "available").length;
+  const reserved  = mapSlots.filter(s => s.status === "reserved").length;
+  const disabled  = mapSlots.filter(s => s.status === "disabled").length;
+  const pct = mapSlots.length > 0 ? Math.round((occupied / (mapSlots.length - disabled)) * 100) : 0;
 
   const slotColor = (s: SlotStatus) => ({
     available: { bg: "var(--green-dim)",  border: "rgba(34,197,94,0.35)",  text: "var(--green)"  },
     occupied:  { bg: "var(--red-dim)",    border: "rgba(239,68,68,0.35)",   text: "var(--red)"    },
     reserved:  { bg: "var(--amber-dim)",  border: "rgba(245,158,11,0.35)", text: "var(--amber)"  },
     disabled:  { bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.05)", text: "rgba(255,255,255,0.1)" },
-  }[s]);
+  }[s] || { bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.05)", text: "rgba(255,255,255,0.1)" });
+
+  if (loading) {
+    return <div style={{ padding: "2rem", color: "var(--text-muted)" }}>Connecting to database...</div>;
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", position: "relative" }}>
@@ -51,25 +108,13 @@ export default function MapPage() {
       <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
         {/* Zone tabs */}
         <div style={{ display: "flex", gap: "4px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "3px" }}>
-          {ZONES.map(z => (
-            <button key={z} onClick={() => setZone(z)} style={{
+          {zones.map(z => (
+            <button key={z.id} onClick={() => setActiveZone(z)} style={{
               padding: "0.35rem 1rem", borderRadius: "6px", fontSize: "0.82rem", fontWeight: 600,
               border: "none", cursor: "pointer", transition: "all 0.15s",
-              background: zone === z ? "var(--bg-hover)" : "transparent",
-              color: zone === z ? "var(--text-primary)" : "var(--text-muted)",
-            }}>{z}</button>
-          ))}
-        </div>
-
-        {/* Level tabs */}
-        <div style={{ display: "flex", gap: "4px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "3px" }}>
-          {LEVELS.map(l => (
-            <button key={l} onClick={() => setLevel(l)} style={{
-              padding: "0.35rem 0.875rem", borderRadius: "6px", fontSize: "0.82rem", fontWeight: 600,
-              border: "none", cursor: "pointer", transition: "all 0.15s",
-              background: level === l ? "var(--accent-dim)" : "transparent",
-              color: level === l ? "var(--accent)" : "var(--text-muted)",
-            }}>{l}</button>
+              background: activeZone?.id === z.id ? "var(--bg-hover)" : "transparent",
+              color: activeZone?.id === z.id ? "var(--text-primary)" : "var(--text-muted)",
+            }}>{z.name}</button>
           ))}
         </div>
 
@@ -86,8 +131,10 @@ export default function MapPage() {
         {/* Floor Plan */}
         <div className="card" style={{ padding: "1.5rem", position: "relative" }}>
           <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: "1.25rem", display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{zone} · {level} — Floor Plan</span>
-            <span>10 columns × 5 rows · {slots.length} slots</span>
+            <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+              {activeZone?.name || "Select Zone"} · {activeZone?.level} — Floor Plan
+            </span>
+            <span>10 columns × {Math.ceil(mapSlots.length / 10)} rows · {mapSlots.length} slots</span>
           </div>
 
           {/* Entry / Exit markers */}
@@ -97,15 +144,16 @@ export default function MapPage() {
           </div>
 
           {/* Driving lane + slot grid */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-            onMouseMove={e => setMousePos({ x: e.clientX, y: e.clientY })}
-          >
-            {[0,1,2,3,4].map(row => (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {Array.from({ length: Math.ceil(mapSlots.length / 10) }).map((_, row) => (
               <div key={row} style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", width: "16px", textAlign: "center", fontWeight: 600 }}>{String.fromCharCode(65+row)}</span>
+                <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", width: "16px", textAlign: "center", fontWeight: 600 }}>
+                  {String.fromCharCode(65 + row)}
+                </span>
+                
                 {/* Top half of row */}
                 <div style={{ display: "flex", gap: "5px", flex: 1 }}>
-                  {slots.filter(s => s.row === row).slice(0, 5).map(slot => {
+                  {mapSlots.filter(s => s.row === row).slice(0, 5).map(slot => {
                     const c = slotColor(slot.status);
                     return (
                       <div
@@ -120,23 +168,23 @@ export default function MapPage() {
                           cursor: slot.status !== "disabled" ? "pointer" : "default",
                           transition: "transform 0.15s",
                         }}
-                        onMouseDown={e => { (e.currentTarget as HTMLDivElement).style.transform = "scale(0.94)"; }}
-                        onMouseUp={e  => { (e.currentTarget as HTMLDivElement).style.transform = "scale(1)"; }}
                       >
                         {slot.status !== "disabled" ? slot.id : "—"}
                       </div>
                     );
                   })}
                 </div>
+
                 {/* Driving lane */}
                 <div style={{ width: "28px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <div style={{ height: "2px", width: "100%", background: "rgba(255,255,255,0.06)", position: "relative" }}>
                     <div style={{ position: "absolute", top: "-4px", left: "50%", transform: "translateX(-50%)", fontSize: "0.6rem", color: "var(--text-muted)" }}>⋯</div>
                   </div>
                 </div>
+
                 {/* Bottom half of row */}
                 <div style={{ display: "flex", gap: "5px", flex: 1 }}>
-                  {slots.filter(s => s.row === row).slice(5, 10).map(slot => {
+                  {mapSlots.filter(s => s.row === row).slice(5, 10).map(slot => {
                     const c = slotColor(slot.status);
                     return (
                       <div
@@ -159,6 +207,12 @@ export default function MapPage() {
                 </div>
               </div>
             ))}
+            
+            {mapSlots.length === 0 && (
+              <div style={{ padding: "2rem", textAlign: "center", color: "var(--text-muted)" }}>
+                No slots found for this zone.
+              </div>
+            )}
           </div>
 
           {/* Legend */}
@@ -183,11 +237,11 @@ export default function MapPage() {
           <div className="card">
             <div className="section-title" style={{ marginBottom: "1rem" }}>Zone Stats</div>
             {[
-              { label: "Total Slots",   val: slots.length },
+              { label: "Total Slots",   val: mapSlots.length },
               { label: "Occupied",      val: occupied,  color: "var(--red)"   },
               { label: "Available",     val: available, color: "var(--green)" },
               { label: "Reserved",      val: reserved,  color: "var(--amber)" },
-              { label: "Disabled",      val: slots.filter(s=>s.status==="disabled").length, color: "var(--text-muted)" },
+              { label: "Disabled",      val: disabled,  color: "var(--text-muted)" },
             ].map(r => (
               <div key={r.label} style={{ display: "flex", justifyContent: "space-between", padding: "0.45rem 0", borderBottom: "1px solid var(--border)", fontSize: "0.82rem" }}>
                 <span style={{ color: "var(--text-muted)" }}>{r.label}</span>
