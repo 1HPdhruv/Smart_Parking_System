@@ -4,6 +4,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { Server } from "socket.io";
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET || "parker-os-super-secret-key-2026";
 
 dotenv.config();
 
@@ -21,6 +25,44 @@ app.use(cors());
 app.use(express.json());
 
 /* ── REST Endpoints ── */
+
+/* ── Auth Endpoints ── */
+app.post("/api/auth/register", async (req, res): Promise<any> => {
+  const { firstName, lastName, email, password, role } = req.body;
+  try {
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: "Email already in use" });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: { firstName, lastName, email, password: hashedPassword, role: role || "viewer" }
+    });
+    res.status(201).json({ message: "User registered successfully", userId: user.id });
+  } catch (error) {
+    console.error("Register error:", error);
+    res.status(500).json({ error: "Registration failed" });
+  }
+});
+
+app.post("/api/auth/login", async (req, res): Promise<any> => {
+  const { email, password } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "30d" });
+    res.json({ token, user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role } });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ error: "Login failed" });
+  }
+});
 
 app.get("/", (req, res) => {
   res.send("Parker OS Backend API is running! 🚗");
