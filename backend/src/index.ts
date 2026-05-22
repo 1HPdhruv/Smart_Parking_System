@@ -22,6 +22,10 @@ app.use(express.json());
 
 /* ── REST Endpoints ── */
 
+app.get("/", (req, res) => {
+  res.send("Parker OS Backend API is running! 🚗");
+});
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
 });

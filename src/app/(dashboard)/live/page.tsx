@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { io, Socket } from "socket.io-client";
 import { OccupancyChart } from "@/components/charts/occupancy-chart";
 
 type SlotStatus = "available" | "occupied" | "reserved";
@@ -46,35 +47,43 @@ export default function LiveDashboardPage() {
   const [selected, setSelected] = useState<Slot | null>(null);
   const [newEvent, setNewEvent] = useState(false);
 
-  /* ── Slot simulation ── */
-  const tick = useCallback(() => {
-    setSlots(prev => {
-      const next = [...prev];
-      const i = Math.floor(Math.random() * next.length);
-      const cur = next[i];
-      if (cur.status === "occupied")  next[i] = { ...cur, status: "available", plate: undefined, since: undefined };
-      else if (cur.status === "available") next[i] = { ...cur, status: "occupied", plate: PLATES[Math.floor(Math.random()*PLATES.length)], since: "Just now" };
-      return next;
-    });
-  }, []);
-
-  /* ── ANPR feed simulation ── */
-  const addFeedEvent = useCallback(() => {
-    const action: "ENTRY"|"EXIT" = Math.random() > 0.5 ? "ENTRY" : "EXIT";
-    const plate = PLATES[Math.floor(Math.random() * PLATES.length)];
-    const zones = ["Zone A · L1","Zone B · L2","Zone C · L3","Zone A · L2"];
-    const event: ANPREvent = { plate, zone: zones[Math.floor(Math.random()*zones.length)], time: "Just now", action };
-    setFeed(prev => [event, ...prev.slice(0, 9)]);
-    setNewEvent(true);
-    setTimeout(() => setNewEvent(false), 800);
-  }, []);
-
   useEffect(() => {
     if (!live) return;
-    const slotId = setInterval(tick, 2400);
-    const feedId = setInterval(addFeedEvent, 4500);
-    return () => { clearInterval(slotId); clearInterval(feedId); };
-  }, [live, tick, addFeedEvent]);
+
+    const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const socket: Socket = io(socketUrl);
+
+    socket.on("connect", () => {
+      console.log("Connected to live server");
+    });
+
+    socket.on("SLOT_UPDATE", (data: { slotId: string; status: SlotStatus; plate?: string }) => {
+      setSlots(prev => prev.map(s => 
+        s.id === data.slotId 
+          ? { ...s, status: data.status, plate: data.plate, since: "Just now" } 
+          : s
+      ));
+    });
+
+    socket.on("ANPR_EVENT", (data: { plate: string; action: "ENTRY" | "EXIT"; timestamp: string; slotId?: string }) => {
+      const zones = ["Zone A · L1", "Zone B · L2", "Zone C · L3"];
+      const zone = data.slotId ? `Zone A · ${data.slotId}` : zones[Math.floor(Math.random()*zones.length)];
+      const event: ANPREvent = { 
+        plate: data.plate, 
+        zone, 
+        time: "Just now", 
+        action: data.action 
+      };
+      
+      setFeed(prev => [event, ...prev.slice(0, 9)]);
+      setNewEvent(true);
+      setTimeout(() => setNewEvent(false), 800);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [live]);
 
   const occupied  = slots.filter(s => s.status === "occupied").length;
   const available = slots.filter(s => s.status === "available").length;
