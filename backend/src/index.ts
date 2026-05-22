@@ -216,6 +216,74 @@ app.get("/api/analytics", async (req, res) => {
   }
 });
 
+app.get("/api/finance", async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(startOfDay);
+    startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const completedSessions = await prisma.session.findMany({
+      where: { status: "COMPLETED", exitTime: { not: null } },
+      include: { slot: { include: { zone: true } } },
+      orderBy: { exitTime: "desc" }
+    });
+
+    let revToday = 0;
+    let revWeek = 0;
+    let revMonth = 0;
+    let totalRev = 0;
+    const zoneMap: Record<string, { revenue: number, sessions: number }> = {};
+
+    completedSessions.forEach(s => {
+      const exit = s.exitTime!;
+      const fee = s.fee || 0;
+      
+      totalRev += fee;
+      if (exit >= startOfDay) revToday += fee;
+      if (exit >= startOfWeek) revWeek += fee;
+      if (exit >= startOfMonth) revMonth += fee;
+
+      const zoneName = s.slot?.zone?.name || "Unknown";
+      if (!zoneMap[zoneName]) zoneMap[zoneName] = { revenue: 0, sessions: 0 };
+      zoneMap[zoneName].revenue += fee;
+      zoneMap[zoneName].sessions += 1;
+    });
+
+    const avgFee = completedSessions.length > 0 ? Math.round(totalRev / completedSessions.length) : 0;
+    const zoneRevenue = Object.entries(zoneMap).map(([zone, data]) => ({
+      zone, revenue: data.revenue, sessions: data.sessions
+    }));
+
+    const transactions = completedSessions.slice(0, 50).map(s => {
+      const durationMins = Math.floor((s.exitTime!.getTime() - s.entryTime.getTime()) / 60000);
+      const hrs = Math.floor(durationMins / 60);
+      const mins = durationMins % 60;
+      return {
+        id: `TXN-${s.id.slice(18).toUpperCase()}`, // generate pseudo txn ID from cuid
+        plate: s.plate,
+        zone: s.slot ? `${s.slot.zone.name} · ${s.slot.id}` : "Unknown",
+        entry: s.entryTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        exit: s.exitTime!.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        duration: hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`,
+        fee: s.fee,
+        method: "UPI", // simulated payment method
+        date: s.exitTime!.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      };
+    });
+
+    res.json({
+      kpis: { revToday, revWeek, revMonth, avgFee },
+      zoneRevenue,
+      transactions
+    });
+  } catch (error) {
+    console.error("Finance API error:", error);
+    res.status(500).json({ error: "Failed to load financial data" });
+  }
+});
+
 /* ── WebSockets ── */
 
 io.on("connection", (socket) => {
