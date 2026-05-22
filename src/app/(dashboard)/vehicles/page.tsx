@@ -166,7 +166,7 @@ export default function VehiclesPage() {
                       <td style={{ fontFamily: "monospace", fontSize: "0.85rem", color: e.exitTime ? "var(--text-primary)" : "var(--text-muted)" }}>{e.exitTime ? formatTime(e.exitTime) : "—"}</td>
                       <td style={{ color: "var(--text-secondary)" }}>{getDuration(e.entryTime, e.exitTime)}</td>
                       <td style={{ color: "var(--green)", fontWeight: 600 }}>{e.fee ? `₹${e.fee}` : "—"}</td>
-                      <td><span className={`badge ${e.action === "ACTIVE" || e.status === "ACTIVE" ? "badge-green" : ""}`} style={{ fontSize: "0.68rem", background: e.status === "ACTIVE" ? "var(--green-dim)" : "var(--bg-hover)", color: e.status === "ACTIVE" ? "var(--green)" : "var(--text-muted)", borderColor: e.status === "ACTIVE" ? "rgba(34,197,94,0.25)" : "var(--border)" }}>{e.status}</span></td>
+                      <td><span className={`badge ${e.status === "ACTIVE" ? "badge-green" : ""}`} style={{ fontSize: "0.68rem", background: e.status === "ACTIVE" ? "var(--green-dim)" : "var(--bg-hover)", color: e.status === "ACTIVE" ? "var(--green)" : "var(--text-muted)", borderColor: e.status === "ACTIVE" ? "rgba(34,197,94,0.25)" : "var(--border)" }}>{e.status}</span></td>
                     </tr>
                   ))}
                 </tbody>
