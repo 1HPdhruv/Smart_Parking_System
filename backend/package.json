@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
-    "build": "npx prisma generate && npx prisma db push && tsc"
+    "build": "npx prisma generate && npx prisma db push && tsc && node dist/seed.js"
   },
   "engines": {
     "node": ">=18.0.0"
