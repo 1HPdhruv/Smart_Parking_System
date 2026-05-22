@@ -64,6 +64,21 @@ app.post("/api/auth/login", async (req, res): Promise<any> => {
   }
 });
 
+app.put("/api/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const { firstName, lastName, email } = req.body;
+  try {
+    const user = await prisma.user.update({
+      where: { id },
+      data: { firstName, lastName, email }
+    });
+    res.json({ message: "Profile updated successfully", user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role } });
+  } catch (error) {
+    console.error("Update user error:", error);
+    res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
 app.get("/", (req, res) => {
   res.send("Parker OS Backend API is running! 🚗");
 });
