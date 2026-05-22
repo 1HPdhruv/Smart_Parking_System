@@ -11,6 +11,7 @@ export default function MapPage() {
   const [zones, setZones] = useState<BackendZone[]>([]);
   const [activeZone, setActiveZone] = useState<BackendZone | null>(null);
   const [hovered, setHovered] = useState<MapSlot | null>(null);
+  const [selected, setSelected] = useState<MapSlot | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Fetch initial zones and slots
@@ -59,6 +60,12 @@ export default function MapPage() {
           )
         };
       });
+
+      // Update selected slot if it was the one that changed
+      setSelected(prev => {
+        if (!prev || prev.id !== data.slotId) return prev;
+        return { ...prev, status: data.status, plate: data.plate };
+      });
     });
 
     return () => {
@@ -69,20 +76,18 @@ export default function MapPage() {
   // Compute map grid for active zone
   const mapSlots: MapSlot[] = useMemo(() => {
     if (!activeZone) return [];
-    // Sort slots by ID so they are in consistent order (A01, A02...)
     const sorted = [...activeZone.slots].sort((a, b) => a.id.localeCompare(b.id));
-    return sorted.map((slot, i) => {
-      // 10 columns per row
-      return {
-        ...slot,
-        row: Math.floor(i / 10),
-        col: i % 10,
-        // Mock data for UI aesthetics (real system would pull from active Session)
-        since: slot.status === "occupied" ? "Just now" : undefined,
-        fee: slot.status === "occupied" ? "₹40" : undefined,
-      };
-    });
+    return sorted.map((slot, i) => ({
+      ...slot,
+      row: Math.floor(i / 10),
+      col: i % 10,
+      since: slot.status === "occupied" ? "Just now" : undefined,
+      fee: slot.status === "occupied" ? "₹40" : undefined,
+    }));
   }, [activeZone]);
+
+  // The detail card shows the selected slot (click), or hovered slot as a preview
+  const detailSlot = selected || hovered;
 
   const occupied  = mapSlots.filter(s => s.status === "occupied").length;
   const available = mapSlots.filter(s => s.status === "available").length;
@@ -90,12 +95,25 @@ export default function MapPage() {
   const disabled  = mapSlots.filter(s => s.status === "disabled").length;
   const pct = mapSlots.length > 0 ? Math.round((occupied / (mapSlots.length - disabled)) * 100) : 0;
 
-  const slotColor = (s: SlotStatus) => ({
-    available: { bg: "var(--green-dim)",  border: "rgba(34,197,94,0.35)",  text: "var(--green)"  },
-    occupied:  { bg: "var(--red-dim)",    border: "rgba(239,68,68,0.35)",   text: "var(--red)"    },
-    reserved:  { bg: "var(--amber-dim)",  border: "rgba(245,158,11,0.35)", text: "var(--amber)"  },
-    disabled:  { bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.05)", text: "rgba(255,255,255,0.1)" },
-  }[s] || { bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.05)", text: "rgba(255,255,255,0.1)" });
+  const slotColor = (s: SlotStatus, isSelected: boolean) => {
+    const colors = {
+      available: { bg: "var(--green-dim)",  border: "rgba(34,197,94,0.35)",  text: "var(--green)"  },
+      occupied:  { bg: "var(--red-dim)",    border: "rgba(239,68,68,0.35)",   text: "var(--red)"    },
+      reserved:  { bg: "var(--amber-dim)",  border: "rgba(245,158,11,0.35)", text: "var(--amber)"  },
+      disabled:  { bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.05)", text: "rgba(255,255,255,0.1)" },
+    }[s] || { bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.05)", text: "rgba(255,255,255,0.1)" };
+    
+    if (isSelected) {
+      return { ...colors, border: "var(--accent)", bg: colors.bg };
+    }
+    return colors;
+  };
+
+  const handleSlotClick = (slot: MapSlot) => {
+    if (slot.status === "disabled") return;
+    // Toggle: click same slot to deselect
+    setSelected(prev => prev?.id === slot.id ? null : slot);
+  };
 
   if (loading) {
     return <div style={{ padding: "2rem", color: "var(--text-muted)" }}>Connecting to database...</div>;
@@ -109,7 +127,7 @@ export default function MapPage() {
         {/* Zone tabs */}
         <div style={{ display: "flex", gap: "4px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: "3px" }}>
           {zones.map(z => (
-            <button key={z.id} onClick={() => setActiveZone(z)} style={{
+            <button key={z.id} onClick={() => { setActiveZone(z); setSelected(null); }} style={{
               padding: "0.35rem 1rem", borderRadius: "6px", fontSize: "0.82rem", fontWeight: 600,
               border: "none", cursor: "pointer", transition: "all 0.15s",
               background: activeZone?.id === z.id ? "var(--bg-hover)" : "transparent",
@@ -154,19 +172,23 @@ export default function MapPage() {
                 {/* Top half of row */}
                 <div style={{ display: "flex", gap: "5px", flex: 1 }}>
                   {mapSlots.filter(s => s.row === row).slice(0, 5).map(slot => {
-                    const c = slotColor(slot.status);
+                    const isSelected = selected?.id === slot.id;
+                    const c = slotColor(slot.status, isSelected);
                     return (
                       <div
                         key={slot.id}
+                        onClick={() => handleSlotClick(slot)}
                         onMouseEnter={() => setHovered(slot)}
                         onMouseLeave={() => setHovered(null)}
                         style={{
                           flex: 1, height: "44px", borderRadius: "5px",
-                          background: c.bg, border: `1.5px solid ${c.border}`,
+                          background: c.bg, border: `${isSelected ? "2px" : "1.5px"} solid ${c.border}`,
                           display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: "0.58rem", fontWeight: 700, color: c.text,
                           cursor: slot.status !== "disabled" ? "pointer" : "default",
-                          transition: "transform 0.15s",
+                          transition: "all 0.15s",
+                          transform: isSelected ? "scale(1.08)" : "scale(1)",
+                          boxShadow: isSelected ? "0 0 12px rgba(79,110,247,0.3)" : "none",
                         }}
                       >
                         {slot.status !== "disabled" ? slot.id : "—"}
@@ -185,19 +207,23 @@ export default function MapPage() {
                 {/* Bottom half of row */}
                 <div style={{ display: "flex", gap: "5px", flex: 1 }}>
                   {mapSlots.filter(s => s.row === row).slice(5, 10).map(slot => {
-                    const c = slotColor(slot.status);
+                    const isSelected = selected?.id === slot.id;
+                    const c = slotColor(slot.status, isSelected);
                     return (
                       <div
                         key={slot.id}
+                        onClick={() => handleSlotClick(slot)}
                         onMouseEnter={() => setHovered(slot)}
                         onMouseLeave={() => setHovered(null)}
                         style={{
                           flex: 1, height: "44px", borderRadius: "5px",
-                          background: c.bg, border: `1.5px solid ${c.border}`,
+                          background: c.bg, border: `${isSelected ? "2px" : "1.5px"} solid ${c.border}`,
                           display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: "0.58rem", fontWeight: 700, color: c.text,
                           cursor: slot.status !== "disabled" ? "pointer" : "default",
-                          transition: "transform 0.15s",
+                          transition: "all 0.15s",
+                          transform: isSelected ? "scale(1.08)" : "scale(1)",
+                          boxShadow: isSelected ? "0 0 12px rgba(79,110,247,0.3)" : "none",
                         }}
                       >
                         {slot.status !== "disabled" ? slot.id : "—"}
@@ -256,34 +282,39 @@ export default function MapPage() {
             </div>
           </div>
 
-          {/* Hover tooltip as static card */}
-          {hovered && hovered.status !== "disabled" ? (
-            <div className="card" style={{ animation: "fadeUp 0.15s ease both" }}>
+          {/* Slot detail card — persists on click, previews on hover */}
+          {detailSlot && detailSlot.status !== "disabled" ? (
+            <div className="card" style={{ animation: "fadeUp 0.15s ease both", border: selected ? "1px solid var(--accent)" : undefined }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>Slot {hovered.id}</span>
-                <span className={`badge badge-${hovered.status === "available" ? "green" : hovered.status === "occupied" ? "red" : "amber"}`} style={{ fontSize: "0.68rem" }}>
-                  {hovered.status}
-                </span>
+                <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>Slot {detailSlot.id}</span>
+                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                  <span className={`badge badge-${detailSlot.status === "available" ? "green" : detailSlot.status === "occupied" ? "red" : "amber"}`} style={{ fontSize: "0.68rem" }}>
+                    {detailSlot.status}
+                  </span>
+                  {selected && (
+                    <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.9rem", padding: "0 2px" }}>✕</button>
+                  )}
+                </div>
               </div>
-              {hovered.plate && (
+              {detailSlot.plate && (
                 <div style={{ marginBottom: "0.5rem" }}>
                   <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: "2px" }}>Plate</div>
-                  <div style={{ fontFamily: "monospace", color: "var(--accent)", fontWeight: 700 }}>{hovered.plate}</div>
+                  <div style={{ fontFamily: "monospace", color: "var(--accent)", fontWeight: 700 }}>{detailSlot.plate}</div>
                 </div>
               )}
-              {hovered.since && (
+              {detailSlot.since && (
                 <div style={{ marginBottom: "0.5rem" }}>
                   <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: "2px" }}>Parked since</div>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>{hovered.since}</div>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>{detailSlot.since}</div>
                 </div>
               )}
-              {hovered.fee && (
+              {detailSlot.fee && (
                 <div>
                   <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: "2px" }}>Current fee</div>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--green)" }}>{hovered.fee}</div>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--green)" }}>{detailSlot.fee}</div>
                 </div>
               )}
-              {hovered.status === "available" && (
+              {detailSlot.status === "available" && (
                 <button className="btn btn-accent" style={{ marginTop: "0.875rem", width: "100%", justifyContent: "center", fontSize: "0.8rem", padding: "0.45rem" }}>
                   Reserve Slot
                 </button>
@@ -291,7 +322,7 @@ export default function MapPage() {
             </div>
           ) : (
             <div className="card" style={{ background: "transparent", border: "1px dashed var(--border)", textAlign: "center", padding: "2rem 1rem" }}>
-              <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>Hover a slot<br />to view details</div>
+              <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>Click a slot<br />to view details &amp; actions</div>
             </div>
           )}
         </div>
