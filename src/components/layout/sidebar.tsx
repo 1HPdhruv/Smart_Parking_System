@@ -18,10 +18,12 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo">
-        <div className="nav-logo-mark">P</div>
-        <span className="nav-logo-text">Parker<span style={{ color: "var(--accent)" }}>.</span></span>
-      </div>
+      <Link href="/" style={{ textDecoration: "none" }}>
+        <div className="sidebar-logo" style={{ cursor: "pointer", transition: "opacity 0.15s" }}>
+          <div className="nav-logo-mark">P</div>
+          <span className="nav-logo-text">Parker<span style={{ color: "var(--accent)" }}>.</span></span>
+        </div>
+      </Link>
 
       <nav className="sidebar-nav">
         <div className="nav-section-label">Navigation</div>

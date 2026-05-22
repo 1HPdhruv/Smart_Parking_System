@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { io, Socket } from "socket.io-client";
+import { useSearchParams } from "next/navigation";
 
 interface SessionData {
   id: string;
@@ -22,8 +23,10 @@ const WHITELIST = [
   { plate:"MH01-AA-0001", name:"Emergency Services", since:"Jan 1, 2025" },
 ];
 
-export default function VehiclesPage() {
-  const [search, setSearch]   = useState("");
+function VehiclesContent() {
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get("search") || "";
+  const [search, setSearch]   = useState(initialSearch);
   const [tab, setTab]         = useState<"log"|"blocklist"|"whitelist">("log");
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [selected, setSelected] = useState<SessionData | null>(null);
@@ -244,5 +247,13 @@ export default function VehiclesPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function VehiclesPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "2rem", color: "var(--text-muted)" }}>Loading...</div>}>
+      <VehiclesContent />
+    </Suspense>
   );
 }
