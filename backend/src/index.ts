@@ -159,6 +159,63 @@ app.get("/api/vehicles/sessions", async (req, res) => {
   }
 });
 
+app.get("/api/analytics", async (req, res) => {
+  try {
+    const aggregations = await prisma.session.aggregate({
+      _sum: { fee: true },
+      _count: { id: true }
+    });
+    
+    const totalRevenue = aggregations._sum.fee || 0;
+    const totalSessions = aggregations._count.id || 0;
+    const avgRevenue = totalSessions > 0 ? Math.round(totalRevenue / totalSessions) : 0;
+
+    const completedSessions = await prisma.session.findMany({
+      where: { status: "COMPLETED", exitTime: { not: null } },
+      select: { entryTime: true, exitTime: true }
+    });
+
+    const dwellBuckets = { "<15m": 0, "15–30m": 0, "30–60m": 0, "1–2h": 0, "2–4h": 0, "4h+": 0 };
+    let totalDwellMinutes = 0;
+
+    completedSessions.forEach(s => {
+      const mins = Math.floor((s.exitTime!.getTime() - s.entryTime.getTime()) / 60000);
+      totalDwellMinutes += mins;
+      if (mins < 15) dwellBuckets["<15m"]++;
+      else if (mins < 30) dwellBuckets["15–30m"]++;
+      else if (mins < 60) dwellBuckets["30–60m"]++;
+      else if (mins < 120) dwellBuckets["1–2h"]++;
+      else if (mins < 240) dwellBuckets["2–4h"]++;
+      else dwellBuckets["4h+"]++;
+    });
+
+    const avgDwellTime = completedSessions.length > 0 ? Math.round(totalDwellMinutes / completedSessions.length) : 0;
+
+    const topVehiclesQuery = await prisma.session.groupBy({
+      by: ['plate'],
+      _sum: { fee: true },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 5
+    });
+
+    const topVehicles = topVehiclesQuery.map(v => ({
+      plate: v.plate,
+      sessions: v._count.id,
+      revenue: v._sum.fee || 0
+    }));
+
+    res.json({
+      kpis: { totalRevenue, totalSessions, avgRevenue, avgDwellTime },
+      dwellTimeData: Object.entries(dwellBuckets).map(([bucket, count]) => ({ bucket, count })),
+      topVehicles
+    });
+  } catch (error) {
+    console.error("Analytics error:", error);
+    res.status(500).json({ error: "Failed to load analytics" });
+  }
+});
+
 /* ── WebSockets ── */
 
 io.on("connection", (socket) => {
