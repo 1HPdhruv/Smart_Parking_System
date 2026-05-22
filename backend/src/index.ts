@@ -84,21 +84,53 @@ app.get("/api/zones", async (req, res) => {
 });
 
 // Webhook endpoint: Called by physical ANPR cameras or in-ground sensors
-app.post("/api/webhooks/sensor", async (req, res) => {
+app.post("/api/webhooks/sensor", async (req, res): Promise<any> => {
   const { slotId, status, plate, action } = req.body;
   
   try {
-    // 1. Update the database
+    let zoneId = "UNKNOWN";
+
+    // 1. Update the database slot
     if (slotId && status) {
-      await prisma.slot.update({
+      const slot = await prisma.slot.update({
         where: { id: slotId },
-        data: { status }
+        data: { status },
+        include: { zone: true }
       });
+      zoneId = slot.zoneId;
       // 2. Broadcast to all connected frontends instantly
       io.emit("SLOT_UPDATE", { slotId, status, plate });
     }
 
     if (action === "ENTRY" || action === "EXIT") {
+      // Save ANPR Log
+      await prisma.aNPRLog.create({
+        data: { plate, action, zoneId }
+      });
+
+      if (action === "ENTRY") {
+        await prisma.session.create({
+          data: { plate, slotId, status: "ACTIVE" }
+        });
+      } else if (action === "EXIT") {
+        // Complete the session and calculate fee
+        const activeSession = await prisma.session.findFirst({
+          where: { plate, status: "ACTIVE" },
+          orderBy: { entryTime: "desc" }
+        });
+
+        if (activeSession) {
+          const exitTime = new Date();
+          const durationHours = (exitTime.getTime() - activeSession.entryTime.getTime()) / (1000 * 60 * 60);
+          const fee = Math.max(1, Math.ceil(durationHours)) * 50; // Minimum ₹50, then ₹50/hr
+
+          await prisma.session.update({
+            where: { id: activeSession.id },
+            data: { exitTime, fee, status: "COMPLETED" }
+          });
+        }
+      }
+
       io.emit("ANPR_EVENT", { plate, action, timestamp: new Date(), slotId });
     }
 
@@ -106,6 +138,24 @@ app.post("/api/webhooks/sensor", async (req, res) => {
   } catch (error) {
     console.error("Webhook error:", error);
     res.status(500).json({ error: "Webhook processing failed" });
+  }
+});
+
+app.get("/api/vehicles/sessions", async (req, res) => {
+  try {
+    const sessions = await prisma.session.findMany({
+      orderBy: { entryTime: "desc" },
+      include: {
+        slot: {
+          include: { zone: true }
+        }
+      },
+      take: 100
+    });
+    res.json(sessions);
+  } catch (error) {
+    console.error("Failed to fetch sessions:", error);
+    res.status(500).json({ error: "Failed to fetch sessions" });
   }
 });
 
