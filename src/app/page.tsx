@@ -41,8 +41,13 @@ export default function LandingPage() {
           <span className="nav-logo-text">Parker<span style={{ color: "var(--accent)" }}>.</span></span>
         </div>
         <div className="nav-links" style={{ display: "flex", gap: "2rem" }}>
-          {["Features","Solutions","Pricing","Docs"].map(n => (
-            <a key={n} href="#" className="nav-link">{n}</a>
+          {[
+            { name: "Features", href: "#features" },
+            { name: "Solutions", href: "#solutions" },
+            { name: "Pricing", href: "#pricing" },
+            { name: "Docs", href: "#docs" }
+          ].map(link => (
+            <a key={link.name} href={link.href} className="nav-link">{link.name}</a>
           ))}
         </div>
         <div className="nav-actions">
@@ -105,8 +110,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Stats ── */}
-      <section style={{ padding: "2rem 0 4rem" }}>
+      {/* ── Stats / Solutions ── */}
+      <section id="solutions" style={{ padding: "2rem 0 4rem" }}>
         <div className="container">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: "1px", background: "var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", border: "1px solid var(--border)" }}>
             {stats.map((s, i) => (
@@ -137,6 +142,26 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── Pricing ── */}
+      <section id="pricing" style={{ padding: "4rem 0 6rem", background: "var(--bg-surface)" }}>
+        <div className="container" style={{ textAlign: "center" }}>
+          <h2 style={{ marginBottom: "0.75rem" }}>Transparent Pricing</h2>
+          <p style={{ maxWidth: "480px", margin: "0 auto", color: "var(--text-muted)" }}>
+            Flexible plans designed to scale with your operations. Contact our team for enterprise pricing and volume discounts.
+          </p>
+        </div>
+      </section>
+
+      {/* ── Docs ── */}
+      <section id="docs" style={{ padding: "4rem 0 6rem" }}>
+        <div className="container" style={{ textAlign: "center" }}>
+          <h2 style={{ marginBottom: "0.75rem" }}>Developer Documentation</h2>
+          <p style={{ maxWidth: "480px", margin: "0 auto", color: "var(--text-muted)" }}>
+            Explore our comprehensive API guides, SDKs, and integration documentation to build custom solutions on top of Parker OS.
+          </p>
         </div>
       </section>
 
