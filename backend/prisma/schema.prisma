@@ -1,58 +1,175 @@
+// ==============================================================================
+// Prisma Schema — Parker OS
+// ==============================================================================
+// Matches the SQL spec in section 2 with password_hash added to users.
+// Uses Neon serverless Postgres with connection pooling.
+
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
+
+// ─── Users ───────────────────────────────────────────────────────────────────
 
 model User {
-  id        String   @id @default(cuid())
-  firstName String
-  lastName  String
-  email     String   @unique
-  password  String
-  role      String   @default("viewer") // "admin", "operator", "viewer"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String?
+  email         String   @unique
+  password_hash String
+  role          String   // 'driver' | 'admin' | 'staff' — validated at app layer
+  created_at    DateTime @default(now()) @db.Timestamptz()
+
+  bookings                Booking[]
+  approved_audit_logs     AgentAuditLog[]  @relation("ApprovedBy")
+  resolved_approvals      PendingApproval[] @relation("ResolvedBy")
+
+  @@map("users")
 }
+
+// ─── Zones ───────────────────────────────────────────────────────────────────
 
 model Zone {
-  id        String   @id @default(cuid())
-  name      String   @unique // e.g., "Zone A"
-  level     String   // e.g., "Level 1"
-  capacity  Int
-  slots     Slot[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String  @id
+  name                String?
+  base_tariff_per_hour Decimal @db.Decimal
+  min_tariff_pct      Decimal @default(70) @db.Decimal
+  max_tariff_pct      Decimal @default(150) @db.Decimal
+  max_step_change_pct Decimal @default(25) @db.Decimal
+
+  slots    Slot[]
+  bookings Booking[]
+
+  @@map("zones")
 }
+
+// ─── Slots ───────────────────────────────────────────────────────────────────
 
 model Slot {
-  id        String   @id // e.g., "A01"
-  zoneId    String
-  zone      Zone     @relation(fields: [zoneId], references: [id])
-  status    String   @default("available") // "available", "occupied", "reserved", "disabled"
-  sessions  Session[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String @id
+  zone_id      String
+  vehicle_type String?
+  status       String @default("free") // 'free' | 'occupied'
+
+  zone        Zone         @relation(fields: [zone_id], references: [id])
+  bookings    Booking[]
+  sensor_data SensorData[]
+
+  @@map("slots")
 }
 
-model Session {
-  id        String    @id @default(cuid())
-  slotId    String?
-  slot      Slot?     @relation(fields: [slotId], references: [id])
-  plate     String    // e.g., "MH12-AB-4521"
-  entryTime DateTime  @default(now())
-  exitTime  DateTime?
-  fee       Float?
-  status    String    @default("ACTIVE") // "ACTIVE", "COMPLETED"
+// ─── Bookings ────────────────────────────────────────────────────────────────
+
+model Booking {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             String   @db.Uuid
+  zone_id             String
+  slot_id             String
+  start_time          DateTime? @db.Timestamptz()
+  end_time            DateTime? @db.Timestamptz()
+  quoted_price        Decimal?  @db.Decimal
+  status              String    @default("active") // 'active' | 'completed' | 'cancelled'
+  payment_status      String    @default("pending") // 'paid' | 'refunded' | 'pending'
+  vehicle_plate_or_tag String?
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+
+  user         User          @relation(fields: [user_id], references: [id])
+  zone         Zone          @relation(fields: [zone_id], references: [id])
+  slot         Slot          @relation(fields: [slot_id], references: [id])
+  parking_logs ParkingLog[]
+
+  @@map("bookings")
 }
 
-model ANPRLog {
-  id        String   @id @default(cuid())
-  plate     String
-  action    String   // "ENTRY", "EXIT"
-  zoneId    String
-  timestamp DateTime @default(now())
+// ─── Parking Logs ────────────────────────────────────────────────────────────
+
+model ParkingLog {
+  id         Int       @id @default(autoincrement())
+  booking_id String    @db.Uuid
+  entry_time DateTime? @db.Timestamptz()
+  exit_time  DateTime? @db.Timestamptz()
+
+  booking Booking @relation(fields: [booking_id], references: [id])
+
+  @@map("parking_logs")
+}
+
+// ─── Sensor Data ─────────────────────────────────────────────────────────────
+
+model SensorData {
+  id          Int      @id @default(autoincrement())
+  slot_id     String
+  status      String?
+  recorded_at DateTime @default(now()) @db.Timestamptz()
+
+  slot Slot @relation(fields: [slot_id], references: [id])
+
+  @@map("sensor_data")
+}
+
+// ─── Issue Reports ───────────────────────────────────────────────────────────
+
+model IssueReport {
+  id          Int      @id @default(autoincrement())
+  booking_id  String?  @db.Uuid
+  zone_id     String?
+  category    String?
+  description String?
+  status      String   @default("open")
+  created_at  DateTime @default(now()) @db.Timestamptz()
+
+  @@map("issue_reports")
+}
+
+// ─── Anomalies ───────────────────────────────────────────────────────────────
+
+model Anomaly {
+  id          Int      @id @default(autoincrement())
+  zone_id     String?
+  sensor_id   String?
+  category    String?
+  severity    String?
+  description String?
+  created_at  DateTime @default(now()) @db.Timestamptz()
+
+  @@map("anomalies")
+}
+
+// ─── Agent Audit Log ─────────────────────────────────────────────────────────
+
+model AgentAuditLog {
+  id          Int      @id @default(autoincrement())
+  agent       String   // 'driver' | 'ops'
+  tool_name   String?
+  input       Json?
+  outcome     String?  // 'applied' | 'pending_approval' | 'rejected'
+  reasoning   String?
+  approved_by String?  @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamptz()
+
+  approver          User?             @relation("ApprovedBy", fields: [approved_by], references: [id])
+  pending_approvals PendingApproval[]
+
+  @@map("agent_audit_log")
+}
+
+// ─── Pending Approvals ───────────────────────────────────────────────────────
+
+model PendingApproval {
+  id           Int       @id @default(autoincrement())
+  audit_log_id Int
+  expires_at   DateTime? @db.Timestamptz()
+  status       String    @default("pending") // 'pending' | 'approved' | 'rejected'
+  resolved_by  String?   @db.Uuid
+  resolved_at  DateTime? @db.Timestamptz()
+
+  audit_log AgentAuditLog @relation(fields: [audit_log_id], references: [id])
+  resolver  User?         @relation("ResolvedBy", fields: [resolved_by], references: [id])
+
+  @@map("pending_approvals")
 }

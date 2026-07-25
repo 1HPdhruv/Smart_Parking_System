@@ -32,8 +32,9 @@ function LoginForm() {
         throw new Error(data.error || "Invalid credentials");
       }
 
-      // Store token securely in localStorage
-      localStorage.setItem("parker_token", data.token);
+      // Store tokens in localStorage
+      localStorage.setItem("parker_token", data.access_token);
+      localStorage.setItem("parker_refresh", data.refresh_token);
       localStorage.setItem("parker_user", JSON.stringify(data.user));
 
       // Redirect to location selector (will auto-skip if already chosen)

@@ -9,7 +9,7 @@ export default function RegisterPage() {
     firstName: "",
     lastName: "",
     email: "",
-    role: "viewer",
+    role: "driver",
     password: "",
   });
   const [loading, setLoading] = useState(false);
@@ -25,11 +25,16 @@ export default function RegisterPage() {
     setError("");
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const res = await fetch(`${apiUrl}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          name: `${formData.firstName} ${formData.lastName}`.trim(),
+          email: formData.email,
+          password: formData.password,
+          role: formData.role,
+        }),
       });
       const data = await res.json();
 
@@ -37,8 +42,12 @@ export default function RegisterPage() {
         throw new Error(data.error || "Failed to register");
       }
 
-      // Success, redirect to login
-      router.push("/login?registered=true");
+      // Auto-login after registration
+      localStorage.setItem("parker_token", data.access_token);
+      localStorage.setItem("parker_refresh", data.refresh_token);
+      localStorage.setItem("parker_user", JSON.stringify(data.user));
+
+      router.push("/select-location");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -76,8 +85,8 @@ export default function RegisterPage() {
           <div>
             <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "0.4rem" }}>Role</label>
             <select className="input" name="role" value={formData.role} onChange={handleChange} style={{ cursor: "pointer" }} required>
-              <option value="viewer">Viewer</option>
-              <option value="operator">Operator</option>
+              <option value="driver">Driver</option>
+              <option value="staff">Staff</option>
               <option value="admin">Admin</option>
             </select>
           </div>
