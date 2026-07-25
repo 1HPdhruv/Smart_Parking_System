@@ -8,7 +8,7 @@
 //   <AgentChat agent="ops" />      — for admin/staff operator pages
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
-import { driverAgent, opsAgent } from '../lib/api/client';
+import { driverAgent, opsAgent } from '../../lib/api/client';
 
 interface Message {
   role: 'user' | 'assistant';
