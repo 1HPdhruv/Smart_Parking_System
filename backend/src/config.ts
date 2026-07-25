@@ -23,9 +23,9 @@ export const config = {
   // Database — required (Prisma won't connect without it)
   databaseUrl: required('DATABASE_URL'),
 
-  // Anthropic — optional at startup; agent routes return 503 if unset
-  anthropicApiKey: optional('ANTHROPIC_API_KEY'),
-  claudeModel: optional('CLAUDE_MODEL', 'claude-sonnet-4-5'),
+  // Gemini — optional at startup; agent routes return 503 if unset
+  geminiApiKey: optional('GEMINI_API_KEY'),
+  geminiModel: optional('GEMINI_MODEL', 'gemini-2.5-flash'),
 
   // MQTT — optional; subscriber is skipped if not configured
   mqttBrokerUrl: optional('MQTT_BROKER_URL'),
