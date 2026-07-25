@@ -1,8 +1,8 @@
 // ==============================================================================
-// Conversation Loop — Reusable Gemini tool-use agent service
+// Conversation Loop — Reusable Groq tool-use agent service
 // ==============================================================================
 
-import { GoogleGenAI, Content, Part } from '@google/genai';
+import Groq from 'groq-sdk';
 import { config } from '../config.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -10,7 +10,7 @@ import { config } from '../config.js';
 export interface ToolDefinition {
   name: string;
   description: string;
-  input_schema: any; // We'll pass the JSON schema directly as it matches OpenAPI
+  input_schema: any;
 }
 
 export type ToolHandler = (
@@ -26,7 +26,7 @@ export interface ConversationContext {
 }
 
 interface Session {
-  history: Content[];
+  history: Array<Groq.Chat.Completions.ChatCompletionMessageParam>;
   lastAccessed: number;
 }
 
@@ -54,15 +54,15 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-// ─── Gemini Client ──────────────────────────────────────────────────────────
+// ─── Groq Client ──────────────────────────────────────────────────────────
 
-let geminiClient: GoogleGenAI | null = null;
+let groqClient: Groq | null = null;
 
-function getClient(): GoogleGenAI {
-  if (!geminiClient) {
-    geminiClient = new GoogleGenAI({ apiKey: config.geminiApiKey });
+function getClient(): Groq {
+  if (!groqClient) {
+    groqClient = new Groq({ apiKey: config.groqApiKey });
   }
-  return geminiClient;
+  return groqClient;
 }
 
 // ─── Conversation Loop ─────────────────────────────────────────────────────
@@ -79,79 +79,79 @@ export async function runConversationTurn(
   const ai = getClient();
   const session = getSession(context.sessionId);
 
-  // Format tools for Gemini (OpenAPI schema is generally compatible)
-  const formattedTools = [
-    {
-      functionDeclarations: tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: t.input_schema,
-      })),
+  // Format tools for Groq (OpenAI format)
+  const formattedTools: Groq.Chat.Completions.ChatCompletionTool[] = tools.map((t) => ({
+    type: 'function',
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema,
     },
-  ];
+  }));
 
-  // Initialize a chat session using our stored history
-  const chat = ai.chats.create({
-    model: config.geminiModel as string,
-    config: {
-      systemInstruction: systemPrompt,
-      tools: formattedTools,
-      temperature: 0,
-    },
-    // We clone the history so the chat object doesn't mutate our reference
-    // in ways we don't control, though it usually just appends.
-    history: [...session.history],
-  });
+  // Ensure system prompt is the first message
+  if (session.history.length === 0 || session.history[0].role !== 'system') {
+    session.history = [{ role: 'system', content: systemPrompt }, ...session.history];
+  }
+
+  // Add the new user message
+  session.history.push({ role: 'user', content: userMessage });
 
   let round = 0;
-  let response = await chat.sendMessage({ message: userMessage });
+  let finalResponse = '';
 
   while (round < MAX_TOOL_ROUNDS) {
     round++;
 
-    if (response.functionCalls && response.functionCalls.length > 0) {
-      const functionResponses: Part[] = [];
+    const response = await ai.chat.completions.create({
+      model: config.groqModel as string,
+      messages: session.history,
+      tools: formattedTools,
+      tool_choice: 'auto',
+      temperature: 0,
+    });
 
-      for (const call of response.functionCalls) {
+    const message = response.choices[0].message;
+    session.history.push(message);
+
+    if (message.tool_calls && message.tool_calls.length > 0) {
+      for (const call of message.tool_calls) {
+        if (call.type !== 'function') continue;
+        
+        let args: Record<string, unknown> = {};
         try {
-          const result = await toolHandler(
-            call.name as string,
-            call.args as Record<string, unknown>,
-            context,
-          );
-          
-          functionResponses.push({
-            functionResponse: {
-              name: call.name as string,
-              response: { result },
-            },
+          args = JSON.parse(call.function.arguments);
+        } catch (e) {
+          // ignore parsing error, pass empty
+        }
+
+        try {
+          const result = await toolHandler(call.function.name, args, context);
+          session.history.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify(result),
           });
         } catch (err) {
-          functionResponses.push({
-            functionResponse: {
-              name: call.name as string,
-              response: { error: (err as Error).message },
-            },
+          session.history.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify({ error: (err as Error).message }),
           });
         }
       }
-
-      // Send the function responses back to Gemini
-      response = await chat.sendMessage({ message: functionResponses });
     } else {
       // No more function calls, we have a text response
-      
-      // Save the updated history back to our session store
-      // The chat object automatically manages the history array.
-      session.history = chat.getHistory();
-      
-      return response.text || 'I apologize, but I was unable to generate a response.';
+      finalResponse = message.content || 'I apologize, but I was unable to generate a response.';
+      break;
     }
   }
 
-  // Save history even on abort
-  session.history = await chat.getHistory();
-  return 'I apologize, but I reached the maximum number of tool calls for this request. Please try again with a simpler request.';
+  if (round >= MAX_TOOL_ROUNDS) {
+    finalResponse = 'I apologize, but I reached the maximum number of tool calls for this request. Please try again with a simpler request.';
+  }
+
+  return finalResponse;
 }
 
 export function clearSession(sessionId: string): void {

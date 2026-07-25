@@ -24,10 +24,10 @@ opsAgentRouter.post(
   requireRole('admin', 'staff'),
   async (req: Request, res: Response): Promise<void> => {
     try {
-      if (!config.geminiApiKey) {
+      if (!config.groqApiKey) {
         res.status(503).json({
           error: 'Agent not configured',
-          message: 'GEMINI_API_KEY environment variable is not set. Add it in the Render dashboard under Environment Variables.',
+          message: 'GROQ_API_KEY environment variable is not set. Add it in the Render dashboard under Environment Variables.',
         });
         return;
       }

@@ -23,9 +23,9 @@ export const config = {
   // Database — required (Prisma won't connect without it)
   databaseUrl: required('DATABASE_URL'),
 
-  // Gemini — optional at startup; agent routes return 503 if unset
-  geminiApiKey: optional('GEMINI_API_KEY'),
-  geminiModel: optional('GEMINI_MODEL', 'gemini-2.5-flash'),
+  // Groq — optional at startup; agent routes return 503 if unset
+  groqApiKey: optional('GROQ_API_KEY'),
+  groqModel: optional('GROQ_MODEL', 'llama3-70b-8192'),
 
   // MQTT — optional; subscriber is skipped if not configured
   mqttBrokerUrl: optional('MQTT_BROKER_URL'),
