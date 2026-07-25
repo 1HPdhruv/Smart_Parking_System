@@ -54,11 +54,15 @@ const server = app.listen(config.port, () => {
   console.log(`   Approvals: GET  /api/pending-approvals`);
   console.log(`   Audit:     GET  /api/audit-log`);
 
-  try {
-    connectMqtt();
-    console.log(`   MQTT:      subscriber started`);
-  } catch (err) {
-    console.warn(`   MQTT:      failed to start:`, (err as Error).message);
+  if (config.mqttBrokerUrl) {
+    try {
+      connectMqtt();
+      console.log(`   MQTT:      subscriber started (${config.mqttBrokerUrl})`);
+    } catch (err) {
+      console.warn(`   MQTT:      failed to start:`, (err as Error).message);
+    }
+  } else {
+    console.log(`   MQTT:      skipped (MQTT_BROKER_URL not set)`);
   }
 });
 

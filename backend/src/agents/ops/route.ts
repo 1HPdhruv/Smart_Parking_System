@@ -4,6 +4,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
+import { config } from '../../config.js';
 import { authenticate, requireRole } from '../../auth/middleware.js';
 import { runConversationTurn } from '../conversation.js';
 import { OPS_SYSTEM_PROMPT } from './system-prompt.js';
@@ -23,6 +24,14 @@ opsAgentRouter.post(
   requireRole('admin', 'staff'),
   async (req: Request, res: Response): Promise<void> => {
     try {
+      if (!config.anthropicApiKey) {
+        res.status(503).json({
+          error: 'Agent not configured',
+          message: 'ANTHROPIC_API_KEY environment variable is not set. Add it in the Render dashboard under Environment Variables.',
+        });
+        return;
+      }
+
       const parsed = chatSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten().fieldErrors });
