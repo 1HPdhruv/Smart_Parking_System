@@ -25,7 +25,7 @@ export const config = {
 
   // Groq — optional at startup; agent routes return 503 if unset
   groqApiKey: optional('GROQ_API_KEY'),
-  groqModel: optional('GROQ_MODEL', 'llama3-70b-8192'),
+  groqModel: optional('GROQ_MODEL', 'llama-3.3-70b-versatile'),
 
   // MQTT — optional; subscriber is skipped if not configured
   mqttBrokerUrl: optional('MQTT_BROKER_URL'),
