@@ -90,7 +90,7 @@ export async function runConversationTurn(
   }));
 
   // Ensure system prompt is the first message
-  if (session.history.length === 0 || session.history[0].role !== 'system') {
+  if (session.history.length === 0 || session.history[0]?.role !== 'system') {
     session.history = [{ role: 'system', content: systemPrompt }, ...session.history];
   }
 
@@ -111,7 +111,9 @@ export async function runConversationTurn(
       temperature: 0,
     });
 
-    const message = response.choices[0].message;
+    const message = response.choices[0]?.message;
+    if (!message) break;
+    
     session.history.push(message);
 
     if (message.tool_calls && message.tool_calls.length > 0) {
