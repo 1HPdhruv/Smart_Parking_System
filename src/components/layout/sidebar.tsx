@@ -41,6 +41,45 @@ export function Sidebar() {
           );
         })}
 
+        {/* ── AI Agents section ── */}
+        <div className="nav-section-label" style={{ marginTop: "0.75rem" }}>AI Agents</div>
+
+        <Link
+          href="/agent"
+          className={`nav-item${pathname === "/agent" ? " active" : ""}`}
+          style={pathname === "/agent" ? {} : { color: "var(--text-secondary)" }}
+        >
+          <span style={{
+            fontSize: "0.85rem", width: "18px", textAlign: "center", lineHeight: 1,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+          }}>🚗</span>
+          Parker AI
+          <span style={{
+            marginLeft: "auto", fontSize: "0.58rem", fontWeight: 700,
+            background: "rgba(79,110,247,0.15)", color: "var(--accent)",
+            border: "1px solid rgba(79,110,247,0.3)", borderRadius: "4px",
+            padding: "1px 5px", letterSpacing: "0.04em", textTransform: "uppercase",
+          }}>Driver</span>
+        </Link>
+
+        <Link
+          href="/ops-agent"
+          className={`nav-item${pathname === "/ops-agent" ? " active" : ""}`}
+          style={pathname === "/ops-agent" ? {} : { color: "var(--text-secondary)" }}
+        >
+          <span style={{
+            fontSize: "0.85rem", width: "18px", textAlign: "center", lineHeight: 1,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+          }}>⚙️</span>
+          Ops Copilot
+          <span style={{
+            marginLeft: "auto", fontSize: "0.58rem", fontWeight: 700,
+            background: "rgba(34,197,94,0.12)", color: "var(--green)",
+            border: "1px solid rgba(34,197,94,0.25)", borderRadius: "4px",
+            padding: "1px 5px", letterSpacing: "0.04em", textTransform: "uppercase",
+          }}>Admin</span>
+        </Link>
+
         <div className="nav-section-label" style={{ marginTop: "0.75rem" }}>Management</div>
         {navItems.slice(5).map(item => {
           const active = pathname === item.href;
